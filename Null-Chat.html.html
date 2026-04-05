@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SecureChat — E2E Encrypted P2P</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0f0f;
+  --surface: #161616;
+  --surface2: #1e1e1e;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8e8e8;
+  --text2: #888;
+  --text3: #555;
+  --accent: #00d4aa;
+  --accent-dim: rgba(0,212,170,0.12);
+  --accent-dim2: rgba(0,212,170,0.06);
+  --bubble-me: #003d2e;
+  --bubble-me-text: #a7f3d0;
+  --bubble-them: #1e1e1e;
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+}
+
+.app {
+  display: flex;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.logo-name { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+.logo-sub { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
+
+.status-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text3);
+  transition: background 0.3s, box-shadow 0.3s;
+  flex-shrink: 0;
+}
+.status-dot.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.status-dot.connecting { background: #f59e0b; animation: blink 1s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+#statusText { color: var(--text2); font-size: 12px; }
+
+.sidebar-body {
+  flex: 1; overflow-y: auto;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.sidebar-body::-webkit-scrollbar { width: 3px; }
+.sidebar-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+.section-label {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text3); font-family: 'DM Mono', monospace; margin-bottom: 8px;
+}
+
+.role-btns { display: flex; gap: 8px; }
+.role-btn {
+  flex: 1; padding: 10px 0; font-size: 13px; font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: transparent; color: var(--text);
+  cursor: pointer; transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+.role-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+.role-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.role-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+.step-block { animation: fadeUp 0.3s ease; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+textarea.token-box {
+  width: 100%; resize: none;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; color: var(--text2);
+  outline: none; line-height: 1.6;
+  transition: border-color 0.2s;
+}
+textarea.token-box:focus { border-color: var(--accent); color: var(--text); }
+
+.action-btn {
+  width: 100%; padding: 10px 0;
+  font-size: 13px; font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: none; cursor: pointer;
+  transition: all 0.2s; margin-top: 8px;
+  font-family: 'DM Sans', sans-serif;
+}
+.action-btn.ghost { background: var(--surface2); color: var(--text); }
+.action-btn.ghost:hover { background: var(--border2); }
+.action-btn.solid { background: var(--accent); color: #000; font-weight: 600; }
+.action-btn.solid:hover { background: #00bfa0; }
+
+.crypto-info {
+  margin-top: auto;
+  padding: 12px;
+  background: var(--accent-dim2);
+  border: 1px solid rgba(0,212,170,0.1);
+  border-radius: var(--radius-sm);
+  font-size: 11px; line-height: 1.9;
+  font-family: 'DM Mono', monospace;
+  color: var(--text3);
+}
+.crypto-info span { color: var(--accent); }
+
+/* ── CHAT ── */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  min-width: 0;
+}
+
+.chat-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.menu-btn {
+  display: none;
+  background: none; border: none; cursor: pointer;
+  color: var(--text2); padding: 6px; border-radius: 8px;
+  flex-shrink: 0;
+}
+.menu-btn:hover { background: var(--surface2); color: var(--text); }
+
+.chat-header-info { flex: 1; min-width: 0; }
+.chat-header-title { font-size: 15px; font-weight: 600; }
+.chat-header-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+.enc-badge {
+  display: none; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  background: var(--accent-dim);
+  border-radius: 20px;
+  font-size: 11px; color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.enc-badge.show { display: flex; }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.msg-wrap { display: flex; flex-direction: column; }
+.msg-wrap.me { align-items: flex-end; }
+.msg-wrap.them { align-items: flex-start; }
+.msg-wrap.system { align-items: center; margin: 8px 0; }
+
+.msg {
+  max-width: min(72%, 500px);
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px; line-height: 1.55;
+  word-break: break-word;
+}
+.msg-wrap.me .msg {
+  background: var(--bubble-me); color: var(--bubble-me-text);
+  border-bottom-right-radius: 4px;
+}
+.msg-wrap.them .msg {
+  background: var(--bubble-them); color: var(--text);
+  border: 1px solid var(--border2);
+  border-bottom-left-radius: 4px;
+}
+.msg-wrap.system .msg {
+  background: transparent; color: var(--text3);
+  font-size: 11px; font-family: 'DM Mono', monospace;
+  border: none; padding: 2px 8px; max-width: 100%;
+}
+
+.msg-meta { font-size: 10px; color: var(--text3); margin-top: 3px; padding: 0 4px; }
+
+.msg-img {
+  max-width: min(72%, 300px);
+  border-radius: 14px; overflow: hidden; cursor: zoom-in;
+}
+.msg-wrap.me .msg-img { border-bottom-right-radius: 4px; }
+.msg-wrap.them .msg-img { border-bottom-left-radius: 4px; border: 1px solid var(--border2); }
+.msg-img img { width: 100%; display: block; }
+
+.msg-file {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 14px;
+  max-width: min(72%, 300px); cursor: pointer;
+}
+.msg-wrap.me .msg-file { background: var(--bubble-me); color: var(--bubble-me-text); border-bottom-right-radius: 4px; }
+.msg-wrap.them .msg-file { background: var(--bubble-them); color: var(--text); border: 1px solid var(--border2); border-bottom-left-radius: 4px; }
+.file-icon {
+  width: 38px; height: 38px; border-radius: 8px;
+  background: rgba(255,255,255,0.07);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.file-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.file-size { font-size: 11px; opacity: 0.55; margin-top: 2px; }
+
+/* ── INPUT BAR ── */
+.input-area {
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.input-row { display: flex; align-items: flex-end; gap: 8px; }
+
+.attach-btn, .send-btn {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: 10px; border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--text2);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.18s;
+}
+.attach-btn:hover:not(:disabled) { background: var(--border2); color: var(--text); }
+.attach-btn:disabled, .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.send-btn { background: var(--accent); border-color: var(--accent); color: #000; }
+.send-btn:hover:not(:disabled) { background: #00bfa0; }
+
+#msgInput {
+  flex: 1; resize: none;
+  min-height: 40px; max-height: 120px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text); font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none; line-height: 1.5;
+  transition: border-color 0.2s;
+  overflow-y: auto;
+}
+#msgInput:focus { border-color: var(--accent); }
+#msgInput::placeholder { color: var(--text3); }
+#msgInput:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#fileInput { display: none; }
+
+.input-hint { text-align: center; font-size: 11px; color: var(--text3); margin-top: 8px; font-family: 'DM Mono', monospace; }
+
+/* ── LIGHTBOX ── */
+.lightbox {
+  display: none; position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,0.92);
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+}
+.lightbox.open { display: flex; }
+.lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 10px; object-fit: contain; }
+
+/* ── SIDEBAR OVERLAY ── */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,0.65);
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 680px) {
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0;
+    transform: translateX(-100%);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .menu-btn { display: flex; }
+  .enc-badge span { display: none; }
+}
+
+@media (max-width: 400px) {
+  .msg, .msg-img, .msg-file { max-width: 88%; }
+  .chat-header { padding: 12px 14px; }
+  .messages { padding: 14px; }
+  .input-area { padding: 10px 12px 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="">
+</div>
+<div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="8" cy="8" r="2" fill="#000"/>
+          </svg>
+        </div>
+        <div>
+          <div class="logo-name">SecureChat</div>
+          <div class="logo-sub">peer-to-peer · encrypted</div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">disconnected</span>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+      <div>
+        <div class="section-label">01 — choose your role</div>
+        <div class="role-btns">
+          <button class="role-btn" id="btnI" onclick="startAsInitiator()">initiator</button>
+          <button class="role-btn" id="btnR" onclick="startAsResponder()">responder</button>
+        </div>
+      </div>
+
+      <div class="step-block" id="offerSection" style="display:none">
+        <div class="section-label">02 — share this offer</div>
+        <textarea class="token-box" id="offerBox" rows="4" readonly></textarea>
+        <button class="action-btn ghost" onclick="copyText('offerBox')">copy offer</button>
+      </div>
+
+      <div class="step-block" id="answerInputSection" style="display:none">
+        <div class="section-label">03 — paste their answer</div>
+        <textarea class="token-box" id="answerInput" rows="4" placeholder="paste answer here…"></textarea>
+        <button class="action-btn solid" onclick="acceptAnswer()">connect ↗</button>
+      </div>
+
+      <div class="step-block" id="answerSection" style="display:none">
+        <div class="section-label">02 — paste their offer</div>
+        <textarea class="token-box" id="offerInput" rows="4" placeholder="paste offer here…"></textarea>
+        <button class="action-btn solid" onclick="processOffer()">generate answer ↗</button>
+      </div>
+
+      <div class="step-block" id="answerOutputSection" style="display:none">
+        <div class="section-label">03 — share this answer</div>
+        <textarea class="token-box" id="answerBox" rows="4" readonly></textarea>
+        <button class="action-btn ghost" onclick="copyText('answerBox')">copy answer</button>
+      </div>
+
+      <div class="crypto-info">
+        <div><span>ECDH</span> P-256 key exchange</div>
+        <div><span>AES-256-GCM</span> encryption</div>
+        <div><span>WebRTC</span> data channel</div>
+        <div style="margin-top:6px;font-size:10px;">no server · no logs · forward secret</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="chat">
+    <div class="chat-header">
+      <button class="menu-btn" onclick="openSidebar()">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="chat-header-info">
+        <div class="chat-header-title">Encrypted Chat</div>
+        <div class="chat-header-sub">text · images · files · end-to-end encrypted</div>
+      </div>
+      <div class="enc-badge" id="encBadge">
+        <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+          <rect x="1" y="5" width="8" height="7" rx="2" fill="currentColor" opacity="0.35"/>
+          <rect x="1" y="5" width="8" height="7" rx="2" stroke="currentColor" stroke-width="0.8"/>
+          <path d="M3.5 5V3.5a1.5 1.5 0 013 0V5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span>end-to-end encrypted</span>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="msg-wrap system">
+        <div class="msg">choose initiator or responder in the panel to connect</div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-row">
+        <button class="attach-btn" id="attachBtn" disabled title="attach image or file"
+          onclick="document.getElementById('fileInput').click()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M13.5 7.5L7 14a4 4 0 01-5.657-5.657l7-7a2.5 2.5 0 013.536 3.536L5.293 11.46a1 1 0 01-1.415-1.414L10 3.93" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <input type="file" id="fileInput" multiple onchange="handleFileSelect(event)">
+        <textarea id="msgInput" rows="1" placeholder="type a message…" disabled
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" disabled onclick="sendMessage()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint" id="inputHint">connect to a peer to start chatting</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+let pc, dc, myKeyPair, sharedKey;
+const CHUNK_SIZE = 60000;
+
+// ── Sidebar ───────────────────────────────────────────────
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+// ── Lightbox ──────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+// ── UI ────────────────────────────────────────────────────
+function setStatus(s) {
+  document.getElementById('statusText').textContent = s;
+  const d = document.getElementById('statusDot');
+  d.className = 'status-dot' + (s === 'connected' ? ' connected' : s === 'connecting…' ? ' connecting' : '');
+}
+
+function ts() {
+  const n = new Date();
+  return n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
+}
+
+function appendToChat(el) {
+  const box = document.getElementById('messages');
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+function log(txt, side = 'system') {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ' + side;
+  const m = document.createElement('div');
+  m.className = 'msg';
+  m.textContent = txt;
+  wrap.appendChild(m);
+  if (side !== 'system') {
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.textContent = ts() + ' · encrypted';
+    wrap.appendChild(meta);
+  }
+  appendToChat(wrap);
+}
+
+function enableChat() {
+  document.getElementById('msgInput').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('attachBtn').disabled = false;
+  document.getElementById('encBadge').classList.add('show');
+  document.getElementById('inputHint').textContent = 'end-to-end encrypted  ·  enter to send  ·  shift+enter for newline';
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.value).catch(() => { el.select(); document.execCommand('copy'); });
+  const btn = el.nextElementSibling;
+  const orig = btn.textContent;
+  btn.textContent = '✓ copied';
+  setTimeout(() => btn.textContent = orig, 1800);
+}
+
+// ── Crypto ────────────────────────────────────────────────
+async function genKeys() {
+  myKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']
+  );
+}
+
+async function deriveShared(theirPubRaw) {
+  const theirPub = await crypto.subtle.importKey(
+    'raw', theirPubRaw, { name: 'ECDH', namedCurve: 'P-256' }, true, []
+  );
+  sharedKey = await crypto.subtle.deriveKey(
+    { name: 'ECDH', public: theirPub },
+    myKeyPair.privateKey,
+    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+}
+
+async function encBytes(bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sharedKey, bytes);
+  const out = new Uint8Array(12 + ct.byteLength);
+  out.set(iv); out.set(new Uint8Array(ct), 12);
+  return out;
+}
+
+async function decBytes(bytes) {
+  const iv = bytes.slice(0, 12), ct = bytes.slice(12);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, sharedKey, ct));
+}
+
+async function encText(s) {
+  const raw = await encBytes(new TextEncoder().encode(s));
+  return btoa(String.fromCharCode(...raw));
+}
+
+async function decText(b64) {
+  const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return new TextDecoder().decode(await decBytes(raw));
+}
+
+const b2b = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b2u = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
+
+// ── WebRTC ────────────────────────────────────────────────
+function makePC() {
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  pc.oniceconnectionstatechange = () => {
+    const s = pc.iceConnectionState;
+    if (s === 'connected' || s === 'completed') setStatus('connected');
+    if (s === 'disconnected' || s === 'failed') setStatus('disconnected');
+  };
+}
+
+async function startAsInitiator() {
+  document.getElementById('btnI').disabled = true;
+  document.getElementById('btnR').disabled = true;
+  document.getElementById('btnI').classList.add('active');
+  await genKeys(); makePC();
+  dc = pc.createDataChannel('chat', { ordered: true });
+  setupDC(dc);
+  setStatus('connecting…');
+  log('generating offer…');
+
+  const pubRaw = await crypto.subtle.exportKey('raw', myKeyPair.publicKey);
+  await pc.setLocalDescription(await pc.createOffer());
+  await new Promise(r => setTimeout(r, 1500));
+
+  const bundle = { sdp: pc.localDescription, pub: b2b(pubRaw) };
+  document.getElementById('offerBox').value = btoa(JSON.stringify(bundle));
+  document.getElementById('offerSection').style.display = 'block';
+  document.getElementById('answerInputSection').style.display = 'block';
+}
+
+async function startAsResponder() {
+  document.getElementById('btnI').disabled = true;
+  document.getElementById('btnR').disabled = true;
+  document.getElementById('btnR').classList.add('active');
+  await genKeys(); makePC();
+  pc.ondatachannel = e => { dc = e.channel; setupDC(dc); };
+  setStatus('connecting…');
+  document.getElementById('answerSection').style.display = 'block';
+}
+
+async function processOffer() {
+  const raw = document.getElementById('offerInput').value.trim();
+  if (!raw) return;
+  const bundle = JSON.parse(atob(raw));
+  await pc.setRemoteDescription(new RTCSessionDescription(bundle.sdp));
+  await deriveShared(b2u(bundle.pub));
+
+  const pubRaw = await crypto.subtle.exportKey('raw', myKeyPair.publicKey);
+  await pc.setLocalDescription(await pc.createAnswer());
+  await new Promise(r => setTimeout(r, 1500));
+
+  const bundle2 = { sdp: pc.localDescription, pub: b2b(pubRaw) };
+  document.getElementById('answerBox').value = btoa(JSON.stringify(bundle2));
+  document.getElementById('answerOutputSection').style.display = 'block';
+  log('ECDH key exchange complete');
+}
+
+async function acceptAnswer() {
+  const raw = document.getElementById('answerInput').value.trim();
+  if (!raw) return;
+  const bundle = JSON.parse(atob(raw));
+  await pc.setRemoteDescription(new RTCSessionDescription(bundle.sdp));
+  await deriveShared(b2u(bundle.pub));
+  log('ECDH key exchange complete');
+}
+
+// ── Data Channel ──────────────────────────────────────────
+let incoming = {};
+
+function setupDC(ch) {
+  ch.binaryType = 'arraybuffer';
+
+  ch.onopen = () => {
+    setStatus('connected');
+    enableChat();
+    log('🔒 secure channel open — send text, images, and files');
+    closeSidebar();
+  };
+
+  ch.onmessage = async e => {
+    if (typeof e.data === 'string') {
+      let env;
+      try { env = JSON.parse(await decText(e.data)); } catch { return; }
+
+      if (env.type === 'text') {
+        log(env.v, 'them');
+      } else if (env.type === 'start') {
+        incoming[env.id] = { name: env.name, mime: env.mime, size: env.size, chunks: [] };
+      } else if (env.type === 'end') {
+        const f = incoming[env.id];
+        if (!f) return;
+        const blob = new Blob(f.chunks, { type: f.mime });
+        showIncoming(f.name, f.mime, blob);
+        delete incoming[env.id];
+      }
+    } else {
+      // Binary: 16-byte ID + encrypted chunk
+      const idRaw = new Uint8Array(e.data, 0, 16);
+      const id = new TextDecoder().decode(idRaw).replace(/\0/g, '');
+      const enc = new Uint8Array(e.data, 16);
+      const dec = await decBytes(enc);
+      if (incoming[id]) incoming[id].chunks.push(dec);
+    }
+  };
+
+  ch.onclose = () => { setStatus('disconnected'); log('channel closed'); };
+}
+
+// ── Messaging ─────────────────────────────────────────────
+async function sendMessage() {
+  const inp = document.getElementById('msgInput');
+  const txt = inp.value.trim();
+  if (!txt || !dc || dc.readyState !== 'open') return;
+  dc.send(await encText(JSON.stringify({ type: 'text', v: txt })));
+  log(txt, 'me');
+  inp.value = '';
+  inp.style.height = 'auto';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+// ── File Handling ──────────────────────────────────────────
+function handleFileSelect(e) {
+  Array.from(e.target.files).forEach(f => sendFile(f));
+  e.target.value = '';
+}
+
+function randId() {
+  return Math.random().toString(36).slice(2, 10).padEnd(16,'0').slice(0,16);
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+async function sendFile(file) {
+  if (!dc || dc.readyState !== 'open') return;
+  const id = randId();
+  const isImg = file.type.startsWith('image/');
+
+  dc.send(await encText(JSON.stringify({ type: 'start', id, name: file.name, mime: file.type, size: file.size })));
+
+  // Show sender preview
+  const fr = new FileReader();
+  fr.onload = ev => {
+    if (isImg) addImageMsg(ev.target.result, 'me', file.name);
+    else addFileMsg(file.name, file.type, file.size, null, 'me');
+  };
+  fr.readAsDataURL(file);
+
+  // Chunk + send
+  const ab = await file.arrayBuffer();
+  const idEnc = new Uint8Array(16);
+  idEnc.set(new TextEncoder().encode(id).slice(0,16));
+  let offset = 0;
+  while (offset < ab.byteLength) {
+    const slice = new Uint8Array(ab, offset, Math.min(CHUNK_SIZE, ab.byteLength - offset));
+    const enc = await encBytes(slice);
+    const pkt = new Uint8Array(16 + enc.byteLength);
+    pkt.set(idEnc); pkt.set(enc, 16);
+    dc.send(pkt.buffer);
+    offset += slice.byteLength;
+    await new Promise(r => setTimeout(r, 1));
+  }
+
+  dc.send(await encText(JSON.stringify({ type: 'end', id })));
+}
+
+function showIncoming(name, mime, blob) {
+  if (mime.startsWith('image/')) {
+    const url = URL.createObjectURL(blob);
+    addImageMsg(url, 'them', name);
+  } else {
+    addFileMsg(name, mime, blob.size, blob, 'them');
+  }
+}
+
+function addImageMsg(src, side, name) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ' + side;
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'msg-img';
+  imgWrap.onclick = () => openLightbox(src);
+  const img = document.createElement('img');
+  img.src = src; img.alt = name;
+  imgWrap.appendChild(img);
+  wrap.appendChild(imgWrap);
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = ts() + ' · encrypted';
+  wrap.appendChild(meta);
+  appendToChat(wrap);
+}
+
+function addFileMsg(name, mime, size, blob, side) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ' + side;
+  const fd = document.createElement('div');
+  fd.className = 'msg-file';
+  if (blob) {
+    fd.onclick = () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    fd.title = 'click to download';
+  }
+  fd.innerHTML = `
+    <div class="file-icon">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M4 2h7l4 4v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        <path d="M11 2v4h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="file-name">${name}</div>
+      <div class="file-size">${fmtSize(size)}${blob ? ' · tap to download' : ' · sending…'}</div>
+    </div>`;
+  wrap.appendChild(fd);
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = ts() + ' · encrypted';
+  wrap.appendChild(meta);
+  appendToChat(wrap);
+}
+</script>
+</body>
+</html>
